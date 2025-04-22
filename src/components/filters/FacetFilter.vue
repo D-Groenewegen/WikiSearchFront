@@ -90,6 +90,10 @@ export default {
       type: String,
       default: '',
     },
+    valueLabels: {
+      type: String,
+      default: '',
+    },
     buckets: {
       type: [Array, Object],
       default() {
@@ -273,61 +277,15 @@ export default {
         ? organizedBuckets.filter((el) => el.doc_count > 0)
         : [];
 
-      if (selected.length > 0 && !this.fired) {
-        if (this.translation) {
-          organizedBuckets.forEach((element, i) => {
-            const transKey = this.translations[element.key];
-            if (
-              transKey
-            && transKey.printouts[this.translation]
-            ) {
-              if (transKey.printouts[this.translation][0].fulltext) {
-                organizedBuckets[i].name = transKey.printouts[this.translation][0].fulltext;
-              } else {
-                [organizedBuckets[i].name] = transKey.printouts[this.translation];
-              }
-            }
-          });
-        }
-
-        selected.forEach((element, i) => {
-          if (this.translation) {
-            const transValue = this.translations[element.value];
-            if (
-              transValue
-              && transValue.printouts[this.translation]
-            ) {
-              if (
-                transValue.printouts[this.translation][0].fulltext
-              ) {
-                selected[i].name = transValue.printouts[this.translation][0].fulltext;
-              } else {
-                [selected[i].name] = transValue.printouts[this.translation];
-              }
-              Vue.set(this.$store.state.selected, i, selected[i]);
-            }
-          }
-          const value = this.config.facetSettings[selected[i].key]
-            ? this.config.facetSettings[selected[i].key] : false;
-          if (value) {
-            const { valueLabel } = this.config.facetSettings[selected[i].key];
-            selected[i].name = valueLabel;
-          }
-          Vue.set(this.$store.state.selected, i, selected[i]);
-        });
-        this.fired = true;
-      } else {
-        this.fired = true;
-      }
-
+      // sort the buckets
       if (this.type === 'date') {
-        this.strippedBuckets = organizedBuckets.reverse();
+        organizedBuckets.reverse();
       } else if (
         this.config.facetSettings[this.name]
         && this.config.facetSettings[this.name].sort
         === 'alphabetically'
       ) {
-        this.strippedBuckets = organizedBuckets.sort((a, b) => {
+        organizedBuckets.sort((a, b) => {
           const textA = a.key_as_string ? a.key_as_string.toUpperCase() : a.key.toUpperCase();
           const textB = b.key_as_string ? b.key_as_string.toUpperCase() : b.key.toUpperCase();
           // eslint-disable-next-line no-nested-ternary
@@ -340,7 +298,7 @@ export default {
       ) {
         const reA = /[^a-zA-Z]/g;
         const reN = /[^0-9]/g;
-        this.strippedBuckets = organizedBuckets.sort((a, b) => {
+        organizedBuckets.sort((a, b) => {
           const textA = a.key_as_string ? a.key_as_string.toUpperCase() : a.key.toUpperCase();
           const textB = b.key_as_string ? b.key_as_string.toUpperCase() : b.key.toUpperCase();
           const aA = textA.split(' ')[0].replace(reA, '');
@@ -353,13 +311,75 @@ export default {
           }
           return aA > bA ? 1 : -1;
         });
-      } else {
-        this.strippedBuckets = organizedBuckets;
       }
+
+      if (this.config.facetSettings[this.name].order === 'reverse') {
+        organizedBuckets.reverse();
+      }
+
+      if (selected.length > 0 && !this.fired) {
+        if (this.translation) {
+          organizedBuckets.forEach((element, i) => {
+            const transKey = this.translations[element.key];
+            if (
+                transKey
+                && transKey.printouts[this.translation]
+            ) {
+              if (transKey.printouts[this.translation][0].fulltext) {
+                console.log('translation:', this.translation);
+                organizedBuckets[i].name = transKey.printouts[this.translation][0].fulltext;
+              } else {
+                [organizedBuckets[i].name] = transKey.printouts[this.translation];
+              }
+            }
+          });
+        }
+
+        selected.forEach((element, i) => {
+          if (this.translation) {
+            const transValue = this.translations[element.value];
+            if (
+                transValue
+                && transValue.printouts[this.translation]
+            ) {
+              if (
+                  transValue.printouts[this.translation][0].fulltext
+              ) {
+                selected[i].name = transValue.printouts[this.translation][0].fulltext;
+              } else {
+                [selected[i].name] = transValue.printouts[this.translation];
+              }
+              Vue.set(this.$store.state.selected, i, selected[i]);
+            }
+          }
+          const value = this.config.facetSettings[selected[i].key]
+              ? this.config.facetSettings[selected[i].key] : false;
+          if (value) {
+            const { valueLabel } = this.config.facetSettings[selected[i].key];
+            selected[i].name = valueLabel;
+          }
+          Vue.set(this.$store.state.selected, i, selected[i]);
+        });
+        this.fired = true;
+      } else {
+        this.fired = true;
+      }
+
+      // If valueLabels are set, replace the original labels
+      if (this.$store.state.valueLabelMap) {
+        const labelMap = this.$store.state.valueLabelMap;
+        if (labelMap[this.name]) {
+          organizedBuckets.forEach((bucket, i) => {
+            organizedBuckets[i].name = labelMap[this.name][bucket.key];
+          });
+        }
+      }
+
+      this.strippedBuckets = organizedBuckets;
 
       const { value } = this.config.facetSettings[this.name];
       if (value) {
-        const { valueLabel } = this.config.facetSettings[this.name];
+        const {valueLabel} = this.config.facetSettings[this.name];
         const bucket = {
           key: value,
           doc_count: 0,
@@ -369,10 +389,6 @@ export default {
           bucket.name = valueLabel;
         }
         this.strippedBuckets = [bucket];
-      }
-
-      if (this.config.facetSettings[this.name].order === 'reverse') {
-        this.strippedBuckets.reverse();
       }
 
       this.bucketsToShow = this.strippedBuckets;
